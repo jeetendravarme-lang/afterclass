@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../lib/auth';
 
 export default function AuthPage() {
-  const { configured, user, profile, signIn, signUp, signOut } = useAuth();
+  const { configured, user, profile, blocked, signIn, signUp, signOut } = useAuth();
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -20,14 +21,19 @@ export default function AuthPage() {
     const res =
       mode === 'login'
         ? await signIn(email.trim(), password)
-        : await signUp(email.trim(), password, displayName.trim() || email.split('@')[0]);
+        : await signUp(
+            email.trim(),
+            password,
+            displayName.trim() || email.split('@')[0],
+            inviteCode.trim(),
+          );
     setBusy(false);
     if (res.error) {
       setMsg(res.error);
     } else {
       setMsg(
         mode === 'signup'
-          ? 'Account ban gaya! Agar email confirmation on hai to apna inbox check karo, phir login karo.'
+          ? 'Account ban gaya! Ab login karo.'
           : 'Welcome back! 🎉',
       );
       if (mode === 'login') router.push('/chat');
@@ -75,8 +81,15 @@ export default function AuthPage() {
       </h1>
       <p className="mt-1 text-center text-sm text-zinc-400">
         Sirf college friends — login karke group chat aur calls join karo.
-        {mode === 'signup' ? ' Pehla account Admin banta hai.' : ''}
+        {mode === 'signup'
+          ? ' Signup ke liye invite code chahiye — Jeetendra se lo. Pehla account Admin banta hai.'
+          : ''}
       </p>
+      {blocked && (
+        <p className="mt-3 rounded-xl bg-red-600/20 px-3 py-2 text-center text-sm font-semibold text-red-300">
+          Ye account admin ne block kar diya hai. Access ke liye admin se baat karo.
+        </p>
+      )}
       <div className="mt-5 space-y-3">
         {mode === 'signup' && (
           <input
@@ -105,6 +118,18 @@ export default function AuthPage() {
             if (e.key === 'Enter') void submit();
           }}
         />
+        {mode === 'signup' && (
+          <input
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)}
+            placeholder="Invite code (Jeetendra se lo)"
+            autoComplete="off"
+            className="input w-full"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submit();
+            }}
+          />
+        )}
         <button onClick={() => void submit()} disabled={busy} className="btn-gold w-full disabled:opacity-50">
           {busy ? 'Please wait…' : mode === 'login' ? 'Login' : 'Create account'}
         </button>

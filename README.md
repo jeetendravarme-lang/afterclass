@@ -31,7 +31,9 @@ phones from anywhere, sign up, and chat / video-call together.
 | Birthdays | Countdown, confetti + animated greeting on the day, friends’ wishes, birthday photo collection (dates start empty) |
 | Friendship Meter | Counts only from real database rows; “—” where there is no data |
 | AFTERCLASS Universe | MY WORLD (profiles, albums, achievements) · OUR WORLD (photos, memories, friendship tree) · PLAYGROUND (Memory Match game, user-made quizzes, voting polls, challenges) · TIME CAPSULE (throwbacks + sealed future messages — server never leaks the text before the unlock date) |
-| Auth | Email + password (Supabase Auth). First account created = Admin (can delete any message) |
+| Auth | Email + password (Supabase Auth). First account created = Admin. Signup needs a private invite code (`INVITE_CODE` env var, checked server-side) — no open registration |
+| Admin | `/admin` — Admin can block/unblock or permanently remove any member, and delete any message from Group Chat |
+| Security | Private content (chat, uploads, wishes, birthdays, polls, capsule, profiles) is visible only to logged-in members (RLS + login gates). Blocked users are signed out app-wide and cannot post. No secrets in code — everything comes from env vars |
 
 ---
 
@@ -63,11 +65,28 @@ npm run build                      # production build check
 5. **Authentication → Providers → Email**: make sure Email is enabled.
    (Optional: turn OFF “Confirm email” while testing so friends can log in
    immediately; turn it back on for production.)
-6. Paste the three values into `.env.local`.
+6. **Turn OFF open registration** (defense in depth): **Authentication →
+   Configuration → “Allow new users to sign up” → OFF.** With it off, the
+   only way to create an account is the invite-code signup API
+   (`POST /api/signup`), which checks `INVITE_CODE` server-side.
+7. Paste the three values into `.env.local`.
 
 > First account = Admin: the first person who signs up becomes the admin
-> (can delete any message). The owner can also set it manually in SQL:
+> (can delete any message, block/unblock and remove members from `/admin`).
+> The owner can also set it manually in SQL:
 > `update public.profiles set is_admin = true where email = 'you@example.com';`
+
+## 2b. Invite code (required for signup)
+
+- Pick a strong random code and set it as the **`INVITE_CODE`** env var
+  (Vercel → Environment Variables, and `.env.local` for local runs).
+  Example: `openssl rand -hex 8`.
+- **Share the code privately with the 5 friends only** — anyone with the
+  code can create an account. The code is checked server-side in
+  `app/api/signup` (timing-safe compare) and never appears in frontend
+  code or in this repo.
+- To rotate the code, change the env var and redeploy — old codes stop
+  working immediately, existing accounts are not affected.
 
 ## 3. LiveKit setup (free) — required for video / voice calling
 
@@ -91,10 +110,10 @@ state and everything else in the app keeps working normally.
 2. Go to **https://vercel.com/new** → **Import** the repo.
 3. Framework preset: **Next.js** (auto-detected). Root directory: the repo
    root (or `afterclass-app` if the repo contains more than this app).
-4. In **Environment Variables**, add all six values from `.env.local`:
+4. In **Environment Variables**, add all seven values from `.env.local`:
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
    `SUPABASE_SERVICE_ROLE_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`,
-   `LIVEKIT_API_SECRET`.
+   `LIVEKIT_API_SECRET`, `INVITE_CODE`.
 5. **Deploy**. Vercel gives you a public URL like
    `https://afterclass-app.vercel.app` — share that link with friends.
 6. Every future `git push` redeploys automatically.
@@ -102,7 +121,8 @@ state and everything else in the app keeps working normally.
 ## 5. How friends join
 
 1. Open the Vercel link on the phone → **Login / Sign up** → create an
-   account with email + password.
+   account with email + password + the **invite code** (ask Jeetendra for it).
+   Without the code, no account can be created.
 2. **Group Chat** → main group “last-bench-legends” is open to all signed-in
    members. Create more groups or start a 1:1 DM from the same page.
 3. **Video Call** → join the main room, or type a room name and share it —
@@ -133,6 +153,40 @@ state and everything else in the app keeps working normally.
 | `LIVEKIT_URL` | LiveKit Cloud → Settings → Keys | `wss://…livekit.cloud` |
 | `LIVEKIT_API_KEY` | LiveKit Cloud → Settings → Keys | Server-only |
 | `LIVEKIT_API_SECRET` | LiveKit Cloud → Settings → Keys | Server-only — NEVER expose |
+| `INVITE_CODE` | Chosen by the owner (strong random value) | Signup invite code — server-only, NEVER expose or commit a real value |
+
+## Security model
+
+- **Invite-only signup.** `POST /api/signup` verifies the invite code
+  server-side (timing-safe compare against `INVITE_CODE`) and creates the
+  user with the service-role key. There is no direct `supabase.auth.signUp`
+  call from the browser anywhere in the app. Turn OFF “Allow new users to
+  sign up” in the Supabase dashboard as well (step 2.6).
+- **Login-only private content.** Chat, call, gallery, videos, map,
+  birthdays, universe and admin pages render a login prompt for logged-out
+  visitors (`components/RequireAuth.tsx`); the navbar hides private links
+  until login. The home page stays public.
+- **Row-level security.** Every private table (messages, rooms, reactions,
+  profiles, connections, wishes, birthdays, places, achievements, quizzes,
+  polls, challenges, capsule, call history, poll votes) is readable only by
+  authenticated users. Storage buckets are auth-only for reads and uploads.
+- **Admin powers.** First account = admin. From `/admin` the admin can
+  block/unblock any member (blocked users are signed out app-wide and
+  cannot post) or permanently remove an account (server route
+  `POST /api/admin/remove-user`, service-role key, caller verified as admin
+  from their session token). In Group Chat the admin can delete any message
+  (RLS: update own or admin).
+- **Call tokens.** `POST /api/livekit-token` requires a valid Supabase
+  session (Authorization header) and only mints a token for the caller’s
+  own user id; blocked users get 403. LiveKit keys never leave the server.
+- **Secrets.** All keys/codes come from env vars only. Nothing secret is
+  hardcoded anywhere in the repo — check with `grep -ri "sk-\|secret" --include="*.ts" --include="*.tsx" app components lib` before deploying.
+- **Known residual:** files in the public Storage buckets are reachable by
+  direct URL if someone already knows the exact URL (unpredictable UUID
+  paths). All discovery paths (chat, gallery lists, DB reads) are
+  login-gated, so an outsider cannot find those URLs through the app. For
+  full signed-URL protection, make the buckets private and serve media via
+  `createSignedUrl` — a future hardening step, not needed for launch.
 
 ## Troubleshooting
 
@@ -151,14 +205,17 @@ state and everything else in the app keeps working normally.
 
 ```
 afterclass-app/
-  app/                  # Next.js App Router pages + LiveKit token API route
-    page.tsx            # Home
-    gallery/ videos/ auth/ chat/ call/ map/ birthdays/ universe/
-    api/livekit-token/  # server-side LiveKit JWT minting
+  app/                  # Next.js App Router pages + server API routes
+    page.tsx            # Home (public)
+    gallery/ videos/ auth/ chat/ call/ map/ birthdays/ universe/ admin/
+    api/livekit-token/  # server-side LiveKit JWT minting (auth-checked)
+    api/signup/         # invite-code signup (server-side only)
+    api/admin/remove-user/  # admin-only account removal
   components/           # FriendCard, Gallery, VideoPlayer, SongPlayer,
                         # ChatBox, CallRoom, FriendshipMap, MemoryMap,
-                        # BirthdaySection, Navbar, InstagramIcon
+                        # BirthdaySection, Navbar, InstagramIcon, RequireAuth
   lib/                  # data (friends/photos/videos/songs), supabase client,
+                        # supabase-server (service-role, server-only),
                         # livekit config, auth provider, confetti helper
   public/photos/        # bundled real photos (12 + poster)
   public/videos/        # bundled real videos (5)

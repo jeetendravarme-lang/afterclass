@@ -195,9 +195,20 @@ export default function CallRoom({
     setStatus('joining');
     setError('');
     try {
+      const supabase = getSupabase();
+      if (!supabase) {
+        setStatus('error');
+        setError('Supabase is not configured.');
+        return;
+      }
+      const { data: sess } = await supabase.auth.getSession();
+      const accessToken = sess.session?.access_token ?? '';
       const res = await fetch('/api/livekit-token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({ room: roomName, identity, name: displayName }),
       });
       const data: { configured?: boolean; token?: string; url?: string; error?: string } =
@@ -258,7 +269,6 @@ export default function CallRoom({
       setStatus('connected');
 
       // Announce the call in the group chat + presence, so friends see it.
-      const supabase = getSupabase();
       if (supabase) {
         await supabase.from('messages').insert({
           room: 'main',

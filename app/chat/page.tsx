@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import ChatBox from '../../components/ChatBox';
+import RequireAuth from '../../components/RequireAuth';
 import { getSupabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { MAIN_ROOM } from '../../lib/livekit';
@@ -83,6 +84,7 @@ export default function ChatPage() {
       : rooms.find((r) => r.id === roomId)?.name ?? 'Chat';
 
   return (
+    <RequireAuth>
     <div className="space-y-4">
       <header>
         <h1 className="font-display text-5xl tracking-wide text-gold">Group Chat 💬</h1>
@@ -153,5 +155,6 @@ export default function ChatPage() {
         reactions, reply, edit, pin aur photo sharing — sab live hain.
       </p>
     </div>
+    </RequireAuth>
   );
 }

@@ -9,6 +9,7 @@ import { useAuth } from '../../lib/auth';
 import FriendCard from '../../components/FriendCard';
 import FriendshipMap from '../../components/FriendshipMap';
 import MemoryMap from '../../components/MemoryMap';
+import RequireAuth from '../../components/RequireAuth';
 
 // ---------------------------------------------------------------------------
 // Memory Match — real playable game using the real gallery photos.
@@ -287,6 +288,7 @@ export default function UniversePage() {
       : 0;
 
   return (
+    <RequireAuth>
     <div className="space-y-10">
       <header>
         <h1 className="font-display text-5xl tracking-wide text-gold">AFTERCLASS Universe 🌌</h1>
@@ -618,5 +620,6 @@ export default function UniversePage() {
         </div>
       </section>
     </div>
+    </RequireAuth>
   );
 }

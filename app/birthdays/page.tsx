@@ -1,7 +1,9 @@
 import BirthdaySection from '../../components/BirthdaySection';
+import RequireAuth from '../../components/RequireAuth';
 
 export default function BirthdaysPage() {
   return (
+    <RequireAuth>
     <div className="space-y-6">
       <header>
         <h1 className="font-display text-5xl tracking-wide text-gold">Birthdays 🎂</h1>
@@ -12,5 +14,6 @@ export default function BirthdaysPage() {
       </header>
       <BirthdaySection />
     </div>
+    </RequireAuth>
   );
 }

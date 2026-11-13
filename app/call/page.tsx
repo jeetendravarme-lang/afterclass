@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import CallRoom from '../../components/CallRoom';
+import RequireAuth from '../../components/RequireAuth';
 import { getSupabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { MAIN_ROOM } from '../../lib/livekit';
@@ -70,6 +71,7 @@ export default function CallPage() {
   }
 
   return (
+    <RequireAuth>
     <div className="space-y-6">
       <header>
         <h1 className="font-display text-5xl tracking-wide text-gold">Video Call 📞</h1>
@@ -151,5 +153,6 @@ export default function CallPage() {
         </>
       )}
     </div>
+    </RequireAuth>
   );
 }

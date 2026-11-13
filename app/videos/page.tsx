@@ -1,8 +1,10 @@
 import { VIDEOS } from '../../lib/data';
 import VideoPlayer from '../../components/VideoPlayer';
+import RequireAuth from '../../components/RequireAuth';
 
 export default function VideosPage() {
   return (
+    <RequireAuth>
     <div className="space-y-6">
       <header>
         <h1 className="font-display text-5xl tracking-wide text-gold">Videos 🎬</h1>
@@ -13,5 +15,6 @@ export default function VideosPage() {
       </header>
       <VideoPlayer videos={VIDEOS} />
     </div>
+    </RequireAuth>
   );
 }

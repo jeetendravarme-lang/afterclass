@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { AccessToken } from 'livekit-server-sdk';
+import { getAuthedUser, isUserBlocked } from '../../../lib/supabase-server';
 
-// POST /api/livekit-token  { room, identity, name }
+// POST /api/livekit-token  { room, identity, name }  (Authorization: Bearer <supabase access token>)
 // Mints a short-lived LiveKit access token SERVER-SIDE ONLY.
 // The API key/secret never leave the server and never appear in frontend code.
-// If LiveKit is not configured, returns { configured: false } and the UI
-// shows a clean "setup needed" state instead of breaking.
+// Security: only a logged-in, non-blocked member can mint a token, and the
+// identity must be their own Supabase user id — strangers cannot join calls
+// or impersonate a friend. If LiveKit is not configured, returns
+// { configured: false } and the UI shows a clean "setup needed" state.
 
 export async function POST(req: Request) {
   try {
@@ -21,6 +24,26 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: 'room and identity may only contain letters, numbers, - and _' },
         { status: 400 },
+      );
+    }
+
+    const caller = await getAuthedUser(req);
+    if (!caller) {
+      return NextResponse.json(
+        { error: 'Login required to join calls.' },
+        { status: 401 },
+      );
+    }
+    if (identity !== caller.id) {
+      return NextResponse.json(
+        { error: 'identity must match your account.' },
+        { status: 403 },
+      );
+    }
+    if (await isUserBlocked(caller.id)) {
+      return NextResponse.json(
+        { error: 'This account is blocked.' },
+        { status: 403 },
       );
     }
 

@@ -16,9 +16,16 @@ const LINKS = [
   { href: '/universe', label: 'AFTERCLASS' },
 ];
 
+const ADMIN_LINK = { href: '/admin', label: 'Admin 👑' };
+
 export default function Navbar() {
   const pathname = usePathname();
   const { user, profile, signOut, configured } = useAuth();
+
+  // Logged-out visitors only see Home — every private page is behind login.
+  const visibleLinks = user
+    ? [...LINKS, ...(profile?.is_admin ? [ADMIN_LINK] : [])]
+    : [LINKS[0]];
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-ink/90 backdrop-blur">
@@ -32,7 +39,7 @@ export default function Navbar() {
           </span>
         </Link>
         <nav className="flex flex-1 flex-wrap items-center gap-1 overflow-x-auto">
-          {LINKS.map((l) => (
+          {visibleLinks.map((l) => (
             <Link
               key={l.href}
               href={l.href}

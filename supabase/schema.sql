@@ -18,15 +18,24 @@ create table if not exists public.profiles (
   nickname text,
   instagram text,
   is_admin boolean not null default false,
+  -- Set by the admin from /admin. Blocked users are signed out app-wide
+  -- (lib/auth.tsx) and cannot insert messages/reactions (see policies below).
+  is_blocked boolean not null default false,
   created_at timestamptz not null default now()
 );
+-- Safe re-run: add the column if this schema ran before the security update.
+alter table public.profiles add column if not exists is_blocked boolean not null default false;
 alter table public.profiles enable row level security;
 drop policy if exists "profiles readable" on public.profiles;
-create policy "profiles readable" on public.profiles for select using (true);
+create policy "profiles readable" on public.profiles for select using (auth.role() = 'authenticated');
 drop policy if exists "profiles insert own" on public.profiles;
 create policy "profiles insert own" on public.profiles for insert with check (auth.uid() = id);
 drop policy if exists "profiles update own" on public.profiles;
 create policy "profiles update own" on public.profiles for update using (auth.uid() = id);
+drop policy if exists "profiles update by admin" on public.profiles;
+create policy "profiles update by admin" on public.profiles for update using (
+  exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin)
+);
 
 -- ---------- rooms (group chats + 1:1 DMs) ----------
 create table if not exists public.rooms (
@@ -62,7 +71,10 @@ alter table public.messages enable row level security;
 drop policy if exists "messages readable by auth" on public.messages;
 create policy "messages readable by auth" on public.messages for select using (auth.role() = 'authenticated');
 drop policy if exists "messages insert by auth" on public.messages;
-create policy "messages insert by auth" on public.messages for insert with check (auth.role() = 'authenticated');
+create policy "messages insert by auth" on public.messages for insert with check (
+  auth.role() = 'authenticated'
+  and not exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_blocked)
+);
 drop policy if exists "messages update own or admin" on public.messages;
 create policy "messages update own or admin" on public.messages for update using (
   auth.uid() = sender_id
@@ -82,7 +94,10 @@ alter table public.reactions enable row level security;
 drop policy if exists "reactions readable by auth" on public.reactions;
 create policy "reactions readable by auth" on public.reactions for select using (auth.role() = 'authenticated');
 drop policy if exists "reactions insert own" on public.reactions;
-create policy "reactions insert own" on public.reactions for insert with check (auth.uid() = user_id);
+create policy "reactions insert own" on public.reactions for insert with check (
+  auth.uid() = user_id
+  and not exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_blocked)
+);
 drop policy if exists "reactions delete own" on public.reactions;
 create policy "reactions delete own" on public.reactions for delete using (auth.uid() = user_id);
 
@@ -113,7 +128,7 @@ create table if not exists public.connections (
 );
 alter table public.connections enable row level security;
 drop policy if exists "connections readable" on public.connections;
-create policy "connections readable" on public.connections for select using (true);
+create policy "connections readable" on public.connections for select using (auth.role() = 'authenticated');
 drop policy if exists "connections insert by auth" on public.connections;
 create policy "connections insert by auth" on public.connections for insert with check (auth.role() = 'authenticated');
 drop policy if exists "connections delete by auth" on public.connections;
@@ -129,7 +144,7 @@ create table if not exists public.wishes (
 );
 alter table public.wishes enable row level security;
 drop policy if exists "wishes readable" on public.wishes;
-create policy "wishes readable" on public.wishes for select using (true);
+create policy "wishes readable" on public.wishes for select using (auth.role() = 'authenticated');
 drop policy if exists "wishes insert by auth" on public.wishes;
 create policy "wishes insert by auth" on public.wishes for insert with check (auth.role() = 'authenticated');
 
@@ -144,7 +159,7 @@ create table if not exists public.birthdays (
 );
 alter table public.birthdays enable row level security;
 drop policy if exists "birthdays readable" on public.birthdays;
-create policy "birthdays readable" on public.birthdays for select using (true);
+create policy "birthdays readable" on public.birthdays for select using (auth.role() = 'authenticated');
 drop policy if exists "birthdays upsert by auth" on public.birthdays;
 create policy "birthdays upsert by auth" on public.birthdays for insert with check (auth.role() = 'authenticated');
 drop policy if exists "birthdays update by auth" on public.birthdays;
@@ -162,7 +177,7 @@ create table if not exists public.places (
 );
 alter table public.places enable row level security;
 drop policy if exists "places readable" on public.places;
-create policy "places readable" on public.places for select using (true);
+create policy "places readable" on public.places for select using (auth.role() = 'authenticated');
 drop policy if exists "places insert by auth" on public.places;
 create policy "places insert by auth" on public.places for insert with check (auth.role() = 'authenticated');
 
@@ -176,7 +191,7 @@ create table if not exists public.achievements (
 );
 alter table public.achievements enable row level security;
 drop policy if exists "achievements readable" on public.achievements;
-create policy "achievements readable" on public.achievements for select using (true);
+create policy "achievements readable" on public.achievements for select using (auth.role() = 'authenticated');
 drop policy if exists "achievements insert own" on public.achievements;
 create policy "achievements insert own" on public.achievements for insert with check (auth.uid() = user_id);
 
@@ -198,11 +213,11 @@ create table if not exists public.quiz_questions (
 alter table public.quizzes enable row level security;
 alter table public.quiz_questions enable row level security;
 drop policy if exists "quizzes readable" on public.quizzes;
-create policy "quizzes readable" on public.quizzes for select using (true);
+create policy "quizzes readable" on public.quizzes for select using (auth.role() = 'authenticated');
 drop policy if exists "quizzes insert by auth" on public.quizzes;
 create policy "quizzes insert by auth" on public.quizzes for insert with check (auth.role() = 'authenticated');
 drop policy if exists "quiz_questions readable" on public.quiz_questions;
-create policy "quiz_questions readable" on public.quiz_questions for select using (true);
+create policy "quiz_questions readable" on public.quiz_questions for select using (auth.role() = 'authenticated');
 drop policy if exists "quiz_questions insert by auth" on public.quiz_questions;
 create policy "quiz_questions insert by auth" on public.quiz_questions for insert with check (auth.role() = 'authenticated');
 
@@ -231,11 +246,11 @@ alter table public.polls enable row level security;
 alter table public.poll_options enable row level security;
 alter table public.poll_votes enable row level security;
 drop policy if exists "polls readable" on public.polls;
-create policy "polls readable" on public.polls for select using (true);
+create policy "polls readable" on public.polls for select using (auth.role() = 'authenticated');
 drop policy if exists "polls insert by auth" on public.polls;
 create policy "polls insert by auth" on public.polls for insert with check (auth.role() = 'authenticated');
 drop policy if exists "poll_options readable" on public.poll_options;
-create policy "poll_options readable" on public.poll_options for select using (true);
+create policy "poll_options readable" on public.poll_options for select using (auth.role() = 'authenticated');
 drop policy if exists "poll_options insert by auth" on public.poll_options;
 create policy "poll_options insert by auth" on public.poll_options for insert with check (auth.role() = 'authenticated');
 drop policy if exists "poll_votes readable by auth" on public.poll_votes;
@@ -263,7 +278,7 @@ create table if not exists public.challenges (
 );
 alter table public.challenges enable row level security;
 drop policy if exists "challenges readable" on public.challenges;
-create policy "challenges readable" on public.challenges for select using (true);
+create policy "challenges readable" on public.challenges for select using (auth.role() = 'authenticated');
 drop policy if exists "challenges insert by auth" on public.challenges;
 create policy "challenges insert by auth" on public.challenges for insert with check (auth.role() = 'authenticated');
 drop policy if exists "challenges update by auth" on public.challenges;
@@ -279,7 +294,7 @@ create table if not exists public.capsule_messages (
 );
 alter table public.capsule_messages enable row level security;
 drop policy if exists "capsule readable" on public.capsule_messages;
-create policy "capsule readable" on public.capsule_messages for select using (true);
+create policy "capsule readable" on public.capsule_messages for select using (auth.role() = 'authenticated');
 drop policy if exists "capsule insert by auth" on public.capsule_messages;
 create policy "capsule insert by auth" on public.capsule_messages for insert with check (auth.role() = 'authenticated');
 
@@ -325,14 +340,14 @@ on conflict (id) do nothing;
 
 drop policy if exists "public read chat-media" on storage.objects;
 create policy "public read chat-media" on storage.objects
-  for select using (bucket_id = 'chat-media');
+  for select using (bucket_id = 'chat-media' and auth.role() = 'authenticated');
 drop policy if exists "auth upload chat-media" on storage.objects;
 create policy "auth upload chat-media" on storage.objects
   for insert with check (bucket_id = 'chat-media' and auth.role() = 'authenticated');
 
 drop policy if exists "public read gallery" on storage.objects;
 create policy "public read gallery" on storage.objects
-  for select using (bucket_id = 'gallery');
+  for select using (bucket_id = 'gallery' and auth.role() = 'authenticated');
 drop policy if exists "auth upload gallery" on storage.objects;
 create policy "auth upload gallery" on storage.objects
   for insert with check (bucket_id = 'gallery' and auth.role() = 'authenticated');
